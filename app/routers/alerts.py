@@ -4,8 +4,11 @@ from typing import List
 from app.models.models import TradeAlert, Service, Trader, User
 from app.utils.dependencies import get_current_trader, get_db
 from app.utils.schemas import TradeAlertCreate, TradeAlertResponse
-from app.services.telegram_service import telegram_service
+from app.services.telegram_group_manager import telegram_group_manager
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/alerts", tags=["Trade Alerts"])
 
@@ -59,9 +62,10 @@ async def send_trade_alert(
     db.refresh(new_alert)
     
     # Send to Telegram group if configured
+    # All active subscribers will receive this alert in the service group
     if service.telegram_group_id:
         try:
-            # Format message
+            # Format message with trade details
             formatted_message = f"<b>📊 Trade Alert</b>\n\n{alert_data.message}"
             if alert_data.stock_symbol:
                 formatted_message += f"\n\n<b>Symbol:</b> {alert_data.stock_symbol}"
@@ -72,13 +76,18 @@ async def send_trade_alert(
             if alert_data.stop_loss:
                 formatted_message += f"\n<b>Stop Loss:</b> {alert_data.stop_loss}"
             
-            await telegram_service.send_trade_alert(
+            success = await telegram_group_manager.send_alert_to_service_group(
                 group_id=service.telegram_group_id,
                 message=formatted_message
             )
+            
+            if success:
+                logger.info(f"Alert {new_alert.id} sent to {service.name} group")
+            else:
+                logger.warning(f"Failed to send alert {new_alert.id} to Telegram group")
         except Exception as e:
-            # Log error but don't fail the alert creation
-            print(f"Failed to send Telegram alert: {e}")
+            logger.error(f"Error sending Telegram alert: {e}")
+            # Don't fail the alert creation - Telegram is optional
     
     return new_alert
 

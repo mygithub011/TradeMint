@@ -7,6 +7,7 @@ export default function TraderDashboard() {
   const [subscribers, setSubscribers] = useState([]);
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [serviceForm, setServiceForm] = useState({
@@ -16,9 +17,12 @@ export default function TraderDashboard() {
     duration_days: 30,
   });
   const [alertForm, setAlertForm] = useState({
-    title: '',
-    message: '',
     service_id: '',
+    message: '',
+    stock_symbol: '',
+    action: 'BUY',
+    target_price: '',
+    stop_loss: '',
   });
   const { user } = useAuth();
 
@@ -28,16 +32,28 @@ export default function TraderDashboard() {
 
   const fetchData = async () => {
     try {
-      const [servicesData, subscribersData, tradesData] = await Promise.all([
-        traderService.getMyServices(),
-        traderService.getMySubscribers(),
-        traderService.getMyTrades(),
-      ]);
-      setServices(servicesData);
-      setSubscribers(subscribersData);
-      setTrades(tradesData);
+      setError(null);
+      const servicesData = await traderService.getMyServices().catch(err => {
+        console.error('Error fetching services:', err);
+        return [];
+      });
+      
+      const subscribersData = await traderService.getMySubscribers().catch(err => {
+        console.error('Error fetching subscribers:', err);
+        return [];
+      });
+      
+      const tradesData = await traderService.getMyTrades().catch(err => {
+        console.error('Error fetching trades:', err);
+        return [];
+      });
+      
+      setServices(servicesData || []);
+      setSubscribers(subscribersData || []);
+      setTrades(tradesData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setError('Failed to load dashboard data. Please refresh the page.');
     } finally {
       setLoading(false);
     }
@@ -61,10 +77,19 @@ export default function TraderDashboard() {
   const handleSendAlert = async (e) => {
     e.preventDefault();
     try {
-      await traderService.sendTradeAlert(alertForm);
+      const alertData = {
+        service_id: parseInt(alertForm.service_id),
+        message: alertForm.message,
+        stock_symbol: alertForm.stock_symbol || undefined,
+        action: alertForm.action || undefined,
+        target_price: alertForm.target_price || undefined,
+        stop_loss: alertForm.stop_loss || undefined,
+      };
+      await traderService.sendTradeAlert(alertData);
       setShowAlertModal(false);
-      setAlertForm({ title: '', message: '', service_id: '' });
+      setAlertForm({ service_id: '', message: '', stock_symbol: '', action: 'BUY', target_price: '', stop_loss: '' });
       alert('Alert sent successfully!');
+      fetchData();
     } catch (error) {
       alert('Failed to send alert: ' + (error.response?.data?.detail || 'Unknown error'));
     }
@@ -74,6 +99,23 @@ export default function TraderDashboard() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg max-w-md">
+          <h2 className="text-lg font-semibold mb-2">Error Loading Dashboard</h2>
+          <p>{error}</p>
+          <button
+            onClick={fetchData}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -341,7 +383,7 @@ export default function TraderDashboard() {
       {/* Send Alert Modal */}
       {showAlertModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Send Trade Alert</h2>
             <form onSubmit={handleSendAlert} className="space-y-4">
               <div>
@@ -359,28 +401,64 @@ export default function TraderDashboard() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Alert Title</label>
-                <input
-                  type="text"
-                  required
-                  value={alertForm.title}
-                  onChange={(e) => setAlertForm({ ...alertForm, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="e.g., BUY SIGNAL: BTC/USDT"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Alert Message</label>
                 <textarea
                   required
                   value={alertForm.message}
                   onChange={(e) => setAlertForm({ ...alertForm, message: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  rows="4"
-                  placeholder="Alert details..."
+                  rows="3"
+                  placeholder="Detailed alert message (min 10 characters)..."
+                  minLength="10"
                 />
               </div>
-              <div className="flex space-x-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Stock Symbol</label>
+                  <input
+                    type="text"
+                    value={alertForm.stock_symbol}
+                    onChange={(e) => setAlertForm({ ...alertForm, stock_symbol: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g., INFY"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                  <select
+                    value={alertForm.action}
+                    onChange={(e) => setAlertForm({ ...alertForm, action: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="BUY">BUY</option>
+                    <option value="SELL">SELL</option>
+                    <option value="HOLD">HOLD</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Target Price</label>
+                  <input
+                    type="text"
+                    value={alertForm.target_price}
+                    onChange={(e) => setAlertForm({ ...alertForm, target_price: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g., 2500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Stop Loss</label>
+                  <input
+                    type="text"
+                    value={alertForm.stop_loss}
+                    onChange={(e) => setAlertForm({ ...alertForm, stop_loss: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g., 2400"
+                  />
+                </div>
+              </div>
+              <div className="flex space-x-4 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowAlertModal(false)}

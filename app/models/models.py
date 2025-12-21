@@ -39,7 +39,8 @@ class Service(Base):
     description = Column(Text)
     price = Column(Integer, nullable=False)  # Price in INR
     duration_days = Column(Integer, nullable=False)  # 30, 90, etc.
-    telegram_group_id = Column(String, nullable=True)  # Telegram private group ID
+    telegram_group_id = Column(String, nullable=True)  # Telegram private group ID (chat_id)
+    telegram_group_link = Column(String, nullable=True)  # Telegram group invite link
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     

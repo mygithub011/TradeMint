@@ -7,7 +7,10 @@ import asyncio
 from app.models.models import Subscription, Service, Trader, User
 from app.utils.dependencies import get_current_user, get_db
 from app.utils.schemas import SubscriptionCreate, SubscriptionResponse
-from app.services.telegram_service import telegram_service
+from app.services.telegram_group_manager import telegram_group_manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
@@ -72,16 +75,24 @@ async def create_subscription(
     db.commit()
     db.refresh(new_subscription)
     
-    # Add user to Telegram group if configured
+    # Add user to service's Telegram group if both are configured
     if subscription_data.telegram_user_id and service.telegram_group_id:
         try:
-            await telegram_service.add_user_to_group(
+            # Generate invite link for the user
+            invite_link = await telegram_group_manager.generate_invite_link(
                 group_id=service.telegram_group_id,
-                user_id=subscription_data.telegram_user_id
+                is_permanent=False
             )
+            
+            if invite_link:
+                logger.info(f"Generated Telegram invite for user {subscription_data.telegram_user_id} to service {service.id}")
+                # In production, send this link to the user via email
+                # For now, it's stored and can be retrieved
+            else:
+                logger.warning(f"Failed to generate invite link for service {service.id}")
         except Exception as e:
-            # Log error but don't fail the subscription
-            print(f"Failed to add user to Telegram group: {e}")
+            logger.error(f"Error adding user to Telegram group: {e}")
+            # Don't fail the subscription - Telegram is optional
     
     return new_subscription
 
@@ -148,15 +159,15 @@ async def cancel_subscription(
     subscription.status = "CANCELLED"
     subscription.updated_at = datetime.utcnow()
     
-    # Remove user from Telegram group if configured
+    # Remove user from service's Telegram group if configured
     if subscription.telegram_user_id and subscription.service.telegram_group_id:
         try:
-            await telegram_service.remove_user_from_group(
+            await telegram_group_manager.remove_user_from_service_group(
                 group_id=subscription.service.telegram_group_id,
                 user_id=subscription.telegram_user_id
             )
         except Exception as e:
-            print(f"Failed to remove user from Telegram group: {e}")
+            logger.error(f"Failed to remove user from Telegram group: {e}")
     
     db.commit()
     db.refresh(subscription)

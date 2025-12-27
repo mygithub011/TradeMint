@@ -1,11 +1,6 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    }
-  ],
+
   "routes": [
     {
       "src": "/api/(.*)",
@@ -16,6 +11,14 @@
       "dest": "api/index.py"
     }
   ],
+
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 10,
+      "memory": 1024
+    }
+  },
+
   "env": {
     "DATABASE_URL": "@database_url",
     "SECRET_KEY": "@secret_key",
@@ -25,15 +28,11 @@
     "CRON_SECRET": "@cron_secret",
     "VERCEL": "1"
   },
+
   "crons": [
     {
       "path": "/cron/check-expiry",
       "schedule": "0 * * * *"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 10
-    }
-  }
+  ]
 }

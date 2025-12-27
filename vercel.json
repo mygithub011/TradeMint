@@ -8,13 +8,6 @@
     }
   ],
 
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 10,
-      "memory": 1024
-    }
-  },
-
   "env": {
     "DATABASE_URL": "postgresql://neondb_owner:npg_sRUfgNBoe0p2@ep-misty-hat-ad8yiafy-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
     "SECRET_KEY": "14835cac1f72cd635fd9aa6518d567b8ee5bde259ea87d4a52caa8da39a787ac",

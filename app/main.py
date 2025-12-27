@@ -2,9 +2,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+import os
 from app.db.database import Base, engine
-from app.routers import auth, traders, services, subscriptions, admin, alerts
-from app.services.scheduler import start_scheduler, shutdown_scheduler
+from app.routers import auth, traders, services, subscriptions, admin, alerts, marketplace, payments, cron
 
 # Configure logging
 logging.basicConfig(
@@ -24,33 +24,39 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Startup event
+# Startup event - Only run scheduler in non-serverless environments
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Smart Trade API...")
-    start_scheduler()
+    
+    # Only start scheduler if not in Vercel serverless environment
+    if not os.getenv("VERCEL"):
+        from app.services.scheduler import start_scheduler
+        start_scheduler()
+        logger.info("Background scheduler started")
+    else:
+        logger.info("Running in serverless mode - scheduler disabled (use Vercel Cron)")
 
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down Smart Trade API...")
-    shutdown_scheduler()
+    
+    # Only shutdown scheduler if it was started
+    if not os.getenv("VERCEL"):
+        from app.services.scheduler import shutdown_scheduler
+        shutdown_scheduler()
+        logger.info("Background scheduler stopped")
 
 
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://*.vercel.app",  # Vercel deployments
-        "https://*.netlify.app",  # Netlify deployments
-        "https://*.render.com",   # Render deployments
-        "*"  # Allow all for development (remove in production)
-    ],
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers
@@ -60,6 +66,9 @@ app.include_router(services.router)
 app.include_router(subscriptions.router)
 app.include_router(admin.router)
 app.include_router(alerts.router)
+app.include_router(marketplace.router)
+app.include_router(payments.router)
+app.include_router(cron.router)
 
 @app.get("/", tags=["Root"])
 def root():

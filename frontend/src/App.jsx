@@ -8,13 +8,14 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Marketplace from './pages/Marketplace';
+import TraderServices from './pages/TraderServices';
 import ClientDashboard from './pages/ClientDashboard';
 import TraderDashboard from './pages/TraderDashboard';
 import AdminPanel from './pages/AdminPanel';
 
 export default function App() {
   return (
-    <Router>
+    <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <AuthProvider>
         <div className="min-h-screen bg-gray-50">
           <Navbar />
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/marketplace" element={<Marketplace />} />
+            <Route path="/trader/:traderId/services" element={<TraderServices />} />
             
             <Route
               path="/client/dashboard"

@@ -3,7 +3,7 @@ import api from './api';
 export const clientService = {
   // Subscriptions
   getMySubscriptions: async () => {
-    const response = await api.get('/client/subscriptions');
+    const response = await api.get('/subscriptions/');
     return response.data;
   },
 
@@ -19,8 +19,8 @@ export const clientService = {
 
   // Trade History
   getMyTrades: async () => {
-    const response = await api.get('/client/trades');
-    return response.data;
+    // TODO: Implement trades endpoint in backend
+    return [];
   },
 
   // Marketplace
@@ -36,7 +36,7 @@ export const clientService = {
 
   // Alerts
   getMyAlerts: async () => {
-    const response = await api.get('/client/alerts');
+    const response = await api.get('/alerts/my-alerts');
     return response.data;
   }
 };

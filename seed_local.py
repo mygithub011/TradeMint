@@ -51,7 +51,12 @@ try:
     # Create trader profile
     trader = Trader(
         user_id=trader_user.id,
+        name="Rajesh Kumar",
         sebi_reg="INH000001234",
+        pan_card="ABCDE1234F",
+        image_url="https://ui-avatars.com/api/?name=Rajesh+Kumar&background=4F46E5&color=fff&size=200",
+        bio="SEBI registered advisor with 10+ years of experience in equity and F&O trading. Specialized in intraday and swing trading strategies.",
+        trades_per_day=5,
         approved=True
     )
     db.add(trader)
@@ -64,19 +69,22 @@ try:
             "name": "Equity Intraday Calls",
             "description": "High-accuracy intraday stock recommendations",
             "price": 5000,
-            "duration_days": 30
+            "duration_days": 30,
+            "telegram_group_id": "-1003348280516"  # Your Telegram supergroup ID
         },
         {
             "name": "F&O Weekly Strategies",
             "description": "Futures & Options trading strategies",
             "price": 8000,
-            "duration_days": 30
+            "duration_days": 30,
+            "telegram_group_id": "-1003348280516"  # Your Telegram supergroup ID
         },
         {
             "name": "Swing Trading Premium",
             "description": "Medium-term swing trading opportunities",
             "price": 12000,
-            "duration_days": 90
+            "duration_days": 90,
+            "telegram_group_id": "-1003348280516"  # Your Telegram supergroup ID
         }
     ]
 

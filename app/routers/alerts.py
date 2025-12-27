@@ -50,11 +50,14 @@ async def send_trade_alert(
     new_alert = TradeAlert(
         service_id=service.id,
         trader_id=trader.id,
-        message=alert_data.message,
         stock_symbol=alert_data.stock_symbol,
         action=alert_data.action,
-        target_price=alert_data.target_price,
-        stop_loss=alert_data.stop_loss
+        lot_size=alert_data.lot_size,
+        rate=str(alert_data.rate) if alert_data.rate else None,
+        target=str(alert_data.target) if alert_data.target else None,
+        stop_loss=str(alert_data.stop_loss) if alert_data.stop_loss else None,
+        cmp=str(alert_data.cmp) if alert_data.cmp else None,
+        validity=alert_data.validity
     )
     
     db.add(new_alert)
@@ -62,32 +65,39 @@ async def send_trade_alert(
     db.refresh(new_alert)
     
     # Send to Telegram group if configured
-    # All active subscribers will receive this alert in the service group
     if service.telegram_group_id:
         try:
-            # Format message with trade details
-            formatted_message = f"<b>📊 Trade Alert</b>\n\n{alert_data.message}"
-            if alert_data.stock_symbol:
-                formatted_message += f"\n\n<b>Symbol:</b> {alert_data.stock_symbol}"
-            if alert_data.action:
-                formatted_message += f"\n<b>Action:</b> {alert_data.action}"
-            if alert_data.target_price:
-                formatted_message += f"\n<b>Target:</b> {alert_data.target_price}"
-            if alert_data.stop_loss:
-                formatted_message += f"\n<b>Stop Loss:</b> {alert_data.stop_loss}"
+            from app.services.telegram_service import TelegramService
+            telegram_service = TelegramService()
             
-            success = await telegram_group_manager.send_alert_to_service_group(
+            # Prepare alert data for formatting
+            alert_dict = {
+                "action": alert_data.action,
+                "stock_symbol": alert_data.stock_symbol,
+                "lot_size": alert_data.lot_size,
+                "rate": alert_data.rate,
+                "target": alert_data.target,
+                "stop_loss": alert_data.stop_loss,
+                "cmp": alert_data.cmp,
+                "validity": alert_data.validity
+            }
+            
+            # Format and send message
+            formatted_message = telegram_service.format_trade_alert_message(alert_dict)
+            success = await telegram_service.send_trade_alert(
                 group_id=service.telegram_group_id,
                 message=formatted_message
             )
             
             if success:
-                logger.info(f"Alert {new_alert.id} sent to {service.name} group")
+                logger.info(f"Alert {new_alert.id} sent to {service.name} Telegram group {service.telegram_group_id}")
             else:
                 logger.warning(f"Failed to send alert {new_alert.id} to Telegram group")
         except Exception as e:
-            logger.error(f"Error sending Telegram alert: {e}")
+            logger.error(f"Error sending Telegram alert: {str(e)}", exc_info=True)
             # Don't fail the alert creation - Telegram is optional
+    else:
+        logger.info(f"No Telegram group configured for service {service.name}, alert saved to database only")
     
     return new_alert
 

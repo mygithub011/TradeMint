@@ -96,20 +96,51 @@ async def create_subscription(
     
     return new_subscription
 
-@router.get("/", response_model=List[SubscriptionResponse])
+@router.get("/")
 def get_my_subscriptions(
     status_filter: str = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all subscriptions for the current user."""
+    """Get all subscriptions for the current user with trader and service details."""
     query = db.query(Subscription).filter(Subscription.user_id == current_user.id)
     
     if status_filter:
         query = query.filter(Subscription.status == status_filter.upper())
     
     subscriptions = query.order_by(Subscription.created_at.desc()).all()
-    return subscriptions
+    
+    # Enrich with trader and service details
+    result = []
+    for sub in subscriptions:
+        service = db.query(Service).filter(Service.id == sub.service_id).first()
+        trader = db.query(Trader).filter(Trader.id == service.trader_id).first() if service else None
+        
+        sub_data = {
+            "id": sub.id,
+            "service_id": sub.service_id,
+            "user_id": sub.user_id,
+            "start_date": sub.start_date,
+            "end_date": sub.end_date,
+            "status": sub.status,
+            "created_at": sub.created_at,
+            "telegram_user_id": sub.telegram_user_id,
+            "payment_id": sub.payment_id,
+            # Service details
+            "service_name": service.name if service else "Unknown Service",
+            "service_description": service.description if service else None,
+            "service_price": service.price if service else 0,
+            "duration_days": service.duration_days if service else 30,
+            # Trader details
+            "trader_name": trader.name if trader else "Unknown Trader",
+            "trader_sebi_reg": trader.sebi_reg if trader else None,
+            # Calculate days left
+            "days_left": (sub.end_date - datetime.utcnow()).days if sub.end_date > datetime.utcnow() else 0,
+            "is_expired": sub.end_date < datetime.utcnow()
+        }
+        result.append(sub_data)
+    
+    return result
 
 @router.get("/{subscription_id}", response_model=SubscriptionResponse)
 def get_subscription(

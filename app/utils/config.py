@@ -12,10 +12,18 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
     # Database
-    DATABASE_URL: str = "sqlite:///./smarttrade.db"
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./smarttrade.db"  # Fallback for local development
+    )
+    DATABASE_URL_UNPOOLED: Optional[str] = None  # Optional unpooled connection for migrations
     
     # Telegram Bot
-    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_BOT_TOKEN: Optional[str] = "8358386533:AAG-zmUuYFUMF0Mq5LX6Vq7TzB-PLW9lpZM"
+    
+    # Razorpay Payment Gateway
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
     
     # File Upload
     UPLOAD_DIR: str = "./uploads/certificates"
@@ -27,5 +35,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "allow"  # Allow extra fields from .env
 
 settings = Settings()

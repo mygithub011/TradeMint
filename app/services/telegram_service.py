@@ -86,6 +86,37 @@ class TelegramService:
             logger.error(f"Unexpected error sending message: {e}")
             return False
     
+    def format_trade_alert_message(self, alert_data: dict) -> str:
+        """Format trade alert data into a Telegram message."""
+        action_emoji = "📈" if alert_data.get("action") == "BUY" else "📉"
+        
+        message_lines = [
+            f"{action_emoji} <b>New Trade Recommendation</b>",
+            f"<b>{alert_data.get('action', 'N/A')}: {alert_data.get('stock_symbol', 'N/A')}</b>",
+            ""
+        ]
+        
+        # Always show these fields in order (matching the sample format)
+        if alert_data.get("lot_size"):
+            message_lines.append(f"Lotsize: {alert_data['lot_size']}")
+        
+        if alert_data.get("rate"):
+            message_lines.append(f"Rate: {alert_data['rate']}")
+        
+        if alert_data.get("target"):
+            message_lines.append(f"Target: {alert_data['target']}")
+        
+        if alert_data.get("stop_loss"):
+            message_lines.append(f"Stop Loss: {alert_data['stop_loss']}")
+        
+        if alert_data.get("cmp"):
+            message_lines.append(f"CMP: {alert_data['cmp']}")
+        
+        if alert_data.get("validity"):
+            message_lines.append(f"Validity: {alert_data['validity']}")
+        
+        return "\n".join(message_lines)
+    
     async def verify_bot_admin(self, group_id: str) -> bool:
         """Verify if bot is admin in the group."""
         if not self.bot:

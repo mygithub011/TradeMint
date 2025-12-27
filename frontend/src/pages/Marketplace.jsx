@@ -1,31 +1,81 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clientService } from '../services/clientService';
+import { paymentService } from '../services/paymentService';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 
 export default function Marketplace() {
-  const [services, setServices] = useState([]);
+  const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [selectedTrader, setSelectedTrader] = useState(null);
+  const [currentReview, setCurrentReview] = useState(0);
+  const [currentFeature, setCurrentFeature] = useState(0);
+  const [showExistingSubscription, setShowExistingSubscription] = useState(false);
+  const [existingSubscriptionInfo, setExistingSubscriptionInfo] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Customer reviews data
+  const reviews = [
+    {
+      name: "Amit Sharma",
+      role: "Day Trader",
+      image: "https://ui-avatars.com/api/?name=Amit+Sharma&background=0D8ABC&color=fff",
+      rating: 5,
+      text: "The trading signals are incredibly accurate! I've been consistently profitable following the recommendations."
+    },
+    {
+      name: "Priya Patel",
+      role: "Swing Trader",
+      image: "https://ui-avatars.com/api/?name=Priya+Patel&background=6366F1&color=fff",
+      rating: 5,
+      text: "Best investment I've made. The expert analysis has helped me grow my portfolio by 40% in 3 months!"
+    },
+    {
+      name: "Rahul Kumar",
+      role: "Options Trader",
+      image: "https://ui-avatars.com/api/?name=Rahul+Kumar&background=EC4899&color=fff",
+      rating: 5,
+      text: "Professional traders with excellent risk management. Highly recommend their F&O strategies!"
+    }
+  ];
+
+  // Auto-slide reviews
   useEffect(() => {
-    fetchServices();
+    const timer = setInterval(() => {
+      setCurrentReview((prev) => (prev + 1) % reviews.length);
+    }, 5000);
+    return () => clearInterval(timer);
   }, []);
 
-  const fetchServices = async () => {
+  // Auto-slide featured cards
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentFeature((prev) => (prev + 1) % 3);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    fetchTraders();
+  }, []);
+
+  const fetchTraders = async () => {
     try {
-      const data = await clientService.getMarketplace();
-      setServices(data);
+      const response = await api.get('/marketplace/traders');
+      setTraders(response.data);
     } catch (error) {
-      console.error('Error fetching services:', error);
+      console.error('Error fetching traders:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubscribe = async (serviceId) => {
+  const handleSubscribe = async (serviceId, serviceName, servicePrice, traderName) => {
     if (!user) {
       navigate('/login');
       return;
@@ -37,112 +87,489 @@ export default function Marketplace() {
     }
 
     setSubscribing(serviceId);
+    
     try {
-      await clientService.subscribe(serviceId);
-      alert('Successfully subscribed! Check your dashboard.');
-      navigate('/client/dashboard');
+      // First check if user already has an active subscription for this service
+      const mySubscriptions = await clientService.getMySubscriptions();
+      const existingSubscription = mySubscriptions.find(sub => 
+        sub.service_id === serviceId && sub.status === 'ACTIVE'
+      );
+      
+      if (existingSubscription) {
+        // Format the end date
+        const endDate = new Date(existingSubscription.end_date);
+        const formattedDate = endDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit', 
+          year: 'numeric'
+        });
+        
+        setExistingSubscriptionInfo({
+          serviceName,
+          endDate: formattedDate,
+          subscription: existingSubscription
+        });
+        setShowExistingSubscription(true);
+        setSubscribing(null);
+        return;
+      }
+
+      // Step 1: Create Razorpay order
+      const orderData = await paymentService.createOrder(serviceId);
+      
+      // Step 2: Process payment through Razorpay
+      const serviceData = {
+        id: serviceId,
+        name: serviceName,
+        price: servicePrice,
+        traderName: traderName
+      };
+      
+      await paymentService.processPayment(
+        orderData,
+        serviceData,
+        // On success
+        (result) => {
+          console.log('Payment successful:', result);
+          setSuccessMessage(`Successfully subscribed to ${serviceName}!`);
+          setShowSuccess(true);
+          setSubscribing(null);
+          setTimeout(() => {
+            setShowSuccess(false);
+            navigate('/client/dashboard');
+          }, 2500);
+        },
+        // On failure
+        (error) => {
+          console.error('Payment failed:', error);
+          setSubscribing(null);
+          alert('Payment failed: ' + (error.message || 'Unknown error'));
+        }
+      );
+      
     } catch (error) {
-      alert('Failed to subscribe: ' + (error.response?.data?.detail || 'Unknown error'));
-    } finally {
+      console.error('Subscription error:', error);
       setSubscribing(null);
+      alert('Failed to initiate payment: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="text-center bg-white rounded-3xl shadow-2xl p-10">
+          <div className="relative mx-auto mb-6">
+            <div className="animate-spin rounded-full h-20 w-20 border-4 border-purple-200 border-t-indigo-600 mx-auto"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-10 h-10 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+          </div>
+          <p className="text-lg font-semibold text-gray-900">Loading Marketplace...</p>
+          <p className="text-sm text-gray-500 mt-2">Finding the best traders for you</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">Marketplace</h1>
-          <p className="text-gray-600 mt-1">Discover professional trading services</p>
+    <div className="min-h-screen" style={{background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'}}>
+      {/* Success Message */}
+      {showSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-white rounded-xl shadow-2xl p-6 border-l-4 border-green-500 animate-slide-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-green-800 font-semibold">{successMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Hero Header with Modern Gradient and Stock Chart Background */}
+      <div className="relative overflow-hidden text-white shadow-2xl" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)'}}>
+        {/* Background Chart Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <svg className="w-full h-full object-cover" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 350 L100 320 L200 280 L300 240 L400 200 L500 160 L600 120 L700 80 L800 50" 
+                  stroke="white" strokeWidth="4" fill="none" opacity="0.3"/>
+            <path d="M0 380 L120 360 L240 320 L360 270 L480 220 L600 170 L720 120 L800 90" 
+                  stroke="white" strokeWidth="3" fill="none" opacity="0.2"/>
+            <path d="M0 300 L80 290 L160 260 L240 230 L320 180 L400 140 L480 100 L560 70 L640 50 L720 30 L800 20" 
+                  stroke="white" strokeWidth="2" fill="none" opacity="0.15"/>
+            {/* Candlestick patterns */}
+            <g opacity="0.1">
+              <rect x="50" y="250" width="8" height="60" fill="white"/>
+              <rect x="150" y="220" width="8" height="40" fill="white"/>
+              <rect x="250" y="200" width="8" height="80" fill="white"/>
+              <rect x="350" y="180" width="8" height="50" fill="white"/>
+              <rect x="450" y="160" width="8" height="70" fill="white"/>
+              <rect x="550" y="140" width="8" height="45" fill="white"/>
+              <rect x="650" y="120" width="8" height="55" fill="white"/>
+            </g>
+          </svg>
+        </div>
+        
+        {/* Additional blur overlay */}
+        <div className="absolute inset-0 bg-black opacity-5 backdrop-blur-sm"></div>
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative z-10">
+          <div className="text-center">
+            <svg className="w-20 h-20 mx-auto mb-8 drop-shadow-2xl" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Stack of coins - clearer design */}
+              {/* Bottom coin */}
+              <ellipse cx="32" cy="50" rx="12" ry="4" fill="#FFD700" stroke="#FFA500" strokeWidth="1"/>
+              <ellipse cx="32" cy="48" rx="12" ry="4" fill="#FFE55C"/>
+              
+              {/* Middle coin */}
+              <ellipse cx="32" cy="42" rx="11" ry="3.5" fill="#FFD700" stroke="#FFA500" strokeWidth="1"/>
+              <ellipse cx="32" cy="40" rx="11" ry="3.5" fill="#FFE55C"/>
+              
+              {/* Top coin */}
+              <ellipse cx="32" cy="34" rx="10" ry="3" fill="#FFD700" stroke="#FFA500" strokeWidth="1"/>
+              <ellipse cx="32" cy="32" rx="10" ry="3" fill="#FFE55C"/>
+              
+              {/* Currency symbols on coins */}
+              <text x="32" y="52" textAnchor="middle" fill="#FF8C00" fontSize="8" fontWeight="bold">₹</text>
+              <text x="32" y="44" textAnchor="middle" fill="#FF8C00" fontSize="7" fontWeight="bold">₹</text>
+              <text x="32" y="36" textAnchor="middle" fill="#FF8C00" fontSize="6" fontWeight="bold">₹</text>
+              
+              {/* Growth arrow */}
+              <path d="M45 25L50 20L55 25M50 20V35" stroke="#00FF7F" strokeWidth="3" fill="none"/>
+              <path d="M45 25L50 20L55 25" fill="#00FF7F"/>
+              
+              {/* Sparkle effects */}
+              <circle cx="20" cy="25" r="1.5" fill="#FFD700" opacity="0.8"/>
+              <circle cx="44" cy="15" r="1" fill="#FFD700" opacity="0.6"/>
+              <circle cx="18" cy="35" r="1" fill="#FFE55C" opacity="0.7"/>
+              
+              {/* Dollar signs for wealth */}
+              <text x="15" y="20" fill="#32CD32" fontSize="6" fontWeight="bold" opacity="0.7">₹</text>
+              <text x="50" y="45" fill="#32CD32" fontSize="5" fontWeight="bold" opacity="0.6">₹</text>
+            </svg>
+            <h1 className="text-5xl font-extrabold mb-4 drop-shadow-lg">Expert Trading Services</h1>
+            <p className="text-xl mb-8 max-w-3xl mx-auto font-light drop-shadow">
+              Connect with SEBI-registered professionals. Get real-time insights, expert analysis, and proven strategies.
+            </p>
+            
+            {/* Stats */}
+            <div className="flex justify-center gap-8 flex-wrap">
+              <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 backdrop-blur-xl rounded-2xl px-8 py-4 border border-emerald-400/40 shadow-lg">
+                <div className="text-3xl font-bold text-emerald-100">{traders.length}+</div>
+                <div className="text-sm font-light text-emerald-200">Expert Traders</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/30 backdrop-blur-xl rounded-2xl px-8 py-4 border border-blue-400/40 shadow-lg">
+                <div className="text-3xl font-bold text-blue-100">95%</div>
+                <div className="text-sm font-light text-blue-200">Success Rate</div>
+              </div>
+              <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/30 backdrop-blur-xl rounded-2xl px-8 py-4 border border-purple-400/40 shadow-lg">
+                <div className="text-3xl font-bold text-purple-100">10K+</div>
+                <div className="text-sm font-light text-purple-200">Active Users</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent"></div>
+      </div>
+
+      {/* Why Choose TradeMint Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 mt-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Side - Features Carousel */}
+          <div className="bg-white rounded-2xl shadow-xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 text-center mb-6">Our Features</h3>
+            <div className="relative overflow-hidden h-44">
+              <div className="flex transition-transform duration-700 ease-in-out" style={{transform: `translateX(-${currentFeature * 100}%)`}}>
+                {/* Feature Card 1 */}
+                <div className="w-full flex-shrink-0 px-2">
+                  <div className="text-center h-full flex flex-col justify-center">
+                    <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center shadow-lg" style={{background: 'linear-gradient(135deg, #667eea, #764ba2)'}}>
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <h4 className="text-base font-bold mb-2 text-gray-800">SEBI Verified Experts</h4>
+                    <p className="text-gray-600 text-xs leading-relaxed">All traders are verified SEBI-registered professionals with proven track records</p>
+                  </div>
+                </div>
+
+                {/* Feature Card 2 */}
+                <div className="w-full flex-shrink-0 px-2">
+                  <div className="text-center h-full flex flex-col justify-center">
+                    <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center shadow-lg" style={{background: 'linear-gradient(135deg, #f093fb, #f5576c)'}}>
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h4 className="text-base font-bold mb-2 text-gray-800">Real-Time Signals</h4>
+                    <p className="text-gray-600 text-xs leading-relaxed">Get instant trade alerts via Telegram with entry, exit, and stop-loss levels</p>
+                  </div>
+                </div>
+
+                {/* Feature Card 3 */}
+                <div className="w-full flex-shrink-0 px-2">
+                  <div className="text-center h-full flex flex-col justify-center">
+                    <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center shadow-lg" style={{background: 'linear-gradient(135deg, #4facfe, #00f2fe)'}}>
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h4 className="text-base font-bold mb-2 text-gray-800">Transparent Pricing</h4>
+                    <p className="text-gray-600 text-xs leading-relaxed">No hidden charges. Clear pricing with secure Razorpay payment gateway</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Features Dots */}
+            <div className="flex justify-center gap-2 mt-4">
+              {[0, 1, 2].map((index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentFeature(index)}
+                  className={`w-3 h-3 rounded-full transition-all ${index === currentFeature ? 'bg-blue-600 w-6' : 'bg-gray-300'}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Right Side - Customer Reviews Carousel */}
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl p-6 border border-white/50">
+            <div className="flex items-center justify-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-700 mr-3">What Clients Say</h3>
+              <div className="flex gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+            </div>
+            <div className="relative overflow-hidden h-44">
+              <div className="flex transition-transform duration-500 ease-in-out" style={{transform: `translateX(-${currentReview * 100}%)`}}>
+                {reviews.map((review, index) => (
+                  <div key={index} className="w-full flex-shrink-0 px-2">
+                    <div className="text-center h-full flex flex-col justify-center">
+                      <img src={review.image} alt={review.name} className="w-14 h-14 rounded-full mx-auto mb-3 border-2 border-purple-200" />
+                      <div>
+                        <p className="text-xs text-gray-700 italic mb-2 line-clamp-3 leading-relaxed">"{review.text}"</p>
+                        <p className="text-sm text-gray-800 font-semibold">{review.name}</p>
+                        <p className="text-xs text-gray-500">{review.role}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Reviews Dots */}
+            <div className="flex justify-center gap-2 mt-4">
+              {reviews.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentReview(index)}
+                  className={`w-3 h-3 rounded-full transition-all ${index === currentReview ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {services.length === 0 ? (
-          <div className="text-center py-16">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+      {/* Available Traders Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <h2 className="text-4xl font-bold text-center mb-12 text-gray-800">Meet Our Expert Traders</h2>
+        {traders.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
+            <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <h3 className="mt-2 text-lg font-medium text-gray-900">No services available</h3>
-            <p className="mt-1 text-gray-500">Check back later for new trading services</p>
+            <h3 className="mt-4 text-xl font-semibold text-gray-900">No traders available yet</h3>
+            <p className="mt-2 text-gray-500">Check back soon for verified SEBI registered traders</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((service) => (
-              <div key={service.id} className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-gray-900">{service.name}</h3>
-                    {service.is_active && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Active</span>
-                    )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {traders.map((trader) => (
+              <div key={trader.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
+                {/* Trader Header */}
+                <div className="p-4 text-white relative overflow-hidden" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
+                  <div className="absolute top-2 right-2">
+                    <span className="bg-white text-emerald-600 text-xs font-bold px-2 py-1 rounded-full flex items-center shadow-lg">
+                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      VERIFIED
+                    </span>
                   </div>
-                  
-                  <p className="text-gray-600 text-sm mb-4 h-12 overflow-hidden">
-                    {service.description}
+                  <div className="text-center">
+                    <img 
+                      src={trader.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(trader.name)}&background=gradient&color=fff&size=200`}
+                      alt={trader.name}
+                      className="w-16 h-16 rounded-full mx-auto border-3 border-white/40 shadow-lg"
+                    />
+                    <h3 className="text-lg font-bold mt-2 drop-shadow-lg">{trader.name}</h3>
+                    <p className="text-white/90 text-xs mt-1 font-mono">SEBI: {trader.sebi_reg}</p>
+                  </div>
+                </div>
+
+                {/* Trader Stats */}
+                <div className="px-4 py-4 bg-gradient-to-r from-slate-50 to-gray-50">
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Trades Per Day */}
+                    <div className="bg-white border-l-4 border-blue-400 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-center mb-1">
+                        <svg className="w-5 h-5 text-blue-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                        </svg>
+                        <p className="text-2xl font-bold text-slate-800">{trader.trades_per_day}</p>
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium">Trades/Day</p>
+                    </div>
+                    
+                    {/* Services */}
+                    <div className="bg-white border-l-4 border-emerald-400 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-center mb-1">
+                        <svg className="w-5 h-5 text-emerald-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                        </svg>
+                        <p className="text-2xl font-bold text-slate-800">{trader.total_services}</p>
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium">Services</p>
+                    </div>
+                    
+                    {/* Subscribers */}
+                    <div className="bg-white border-l-4 border-amber-400 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-center mb-1">
+                        <svg className="w-5 h-5 text-amber-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                        </svg>
+                        <p className="text-2xl font-bold text-slate-800">{trader.total_subscribers}</p>
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium">Subscribers</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bio */}
+                <div className="p-4">
+                  <p className="text-gray-600 text-sm leading-relaxed h-12 overflow-hidden text-center">
+                    {trader.bio ? trader.bio.substring(0, 60) + '...' : "Expert market insights and trading recommendations."}
                   </p>
+                </div>
 
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-500">Offered by</p>
-                    <p className="text-sm font-medium text-gray-900">{service.trader_email || 'Professional Trader'}</p>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-                    <div>
-                      <p className="text-3xl font-bold text-indigo-600">${service.price}</p>
-                      <p className="text-xs text-gray-500">per {service.duration_days} days</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Subscribers</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {service.subscriber_count || 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Real-time trade alerts
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Telegram group access
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      24/7 support
-                    </div>
-                  </div>
-
+                {/* Explore Services Button */}
+                <div className="px-4 pb-4">
                   <button
-                    onClick={() => handleSubscribe(service.id)}
-                    disabled={subscribing === service.id || !service.is_active}
-                    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      navigate(`/trader/${trader.id}/services`);
+                    }}
+                    className="w-full px-4 py-3 text-white font-semibold rounded-xl transition-all duration-300 hover:shadow-lg hover:scale-105 relative overflow-hidden group"
+                    style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}
                   >
-                    {subscribing === service.id ? 'Subscribing...' : 'Subscribe Now'}
+                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+                    <span className="relative z-10 flex items-center justify-center">
+                      Explore Services
+                      <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </span>
                   </button>
+                </div>
+
+                {/* Card Footer */}
+                <div className="bg-gray-50 px-4 py-2">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
+                      </svg>
+                      Telegram Alerts
+                    </span>
+                    <span className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                      </svg>
+                      Real-time
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Existing Subscription Dialog */}
+      {showExistingSubscription && existingSubscriptionInfo && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 flex flex-col items-center space-y-6 max-w-md mx-4 border-4 border-blue-200">
+            <div className="relative">
+              <div className="bg-gradient-to-br from-blue-400 to-blue-600 rounded-full p-4 shadow-lg">
+                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-2xl font-bold text-gray-800 mb-3">Active Subscription Found</h3>
+              <p className="text-gray-600 mb-2">
+                You already have an active subscription to
+              </p>
+              <p className="text-lg font-semibold text-blue-600 mb-4">
+                {existingSubscriptionInfo.serviceName}
+              </p>
+              <p className="text-gray-600 mb-6">
+                Validity till: <span className="font-semibold text-gray-800">{existingSubscriptionInfo.endDate}</span>
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowExistingSubscription(false)}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExistingSubscription(false);
+                    navigate('/client/dashboard');
+                  }}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  Go to Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification */}
+      {showSuccess && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl p-10 flex flex-col items-center space-y-6 animate-bounce-in border-4 border-green-200 max-w-md mx-4">
+            <div className="relative">
+              <div className="bg-gradient-to-br from-green-400 to-emerald-500 rounded-full p-5 shadow-lg">
+                <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="absolute -top-2 -right-2 animate-ping">
+                <div className="bg-green-400 rounded-full h-8 w-8 opacity-75"></div>
+              </div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Subscription Successful!</h3>
+              <p className="text-gray-600 mt-3 font-medium">
+                {successMessage}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                ✨ Redirecting to your dashboard...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

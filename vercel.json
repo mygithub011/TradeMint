@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "SECRET_KEY": "@secret_key",
+    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token",
+    "RAZORPAY_KEY_ID": "@razorpay_key_id",
+    "RAZORPAY_KEY_SECRET": "@razorpay_key_secret",
+    "CRON_SECRET": "@cron_secret",
+    "VERCEL": "1"
+  },
+  "crons": [
+    {
+      "path": "/cron/check-expiry",
+      "schedule": "0 * * * *"
+    }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 10
+    }
+  }
+}

@@ -3,8 +3,19 @@ import api from './api';
 export const adminService = {
   // Trader Approval
   getPendingTraders: async () => {
-    const response = await api.get('/admin/traders/pending');
-    return response.data;
+    console.log('📡 Calling GET /admin/traders/pending');
+    try {
+      const response = await api.get('/admin/traders/pending');
+      console.log('✅ Response received:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
+      return response.data;
+    } catch (error) {
+      console.error('❌ getPendingTraders error:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      throw error;
+    }
   },
 
   approveTrader: async (traderId) => {
@@ -12,8 +23,10 @@ export const adminService = {
     return response.data;
   },
 
-  rejectTrader: async (traderId) => {
-    const response = await api.post(`/admin/traders/${traderId}/reject`);
+  rejectTrader: async (traderId, reason) => {
+    const response = await api.post(`/admin/traders/${traderId}/reject`, null, {
+      params: { reason }
+    });
     return response.data;
   },
 

@@ -35,11 +35,41 @@ def approve_trader(
     trader.approved = True
     trader.approved_at = datetime.utcnow()
     trader.approved_by = current_user.id
+    trader.rejection_reason = None  # Clear any previous rejection reason
     
     db.commit()
     db.refresh(trader)
     
     return trader
+
+@router.post("/traders/{trader_id}/reject")
+def reject_trader(
+    trader_id: int,
+    reason: str,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Reject a trader with reason (admin only)."""
+    trader = db.query(Trader).filter(Trader.id == trader_id).first()
+    
+    if not trader:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trader not found"
+        )
+    
+    # Store rejection reason
+    trader.rejection_reason = reason
+    trader.approved = False
+    trader.approved_at = None
+    trader.approved_by = None
+    
+    # Deactivate all services by this trader
+    db.query(Service).filter(Service.trader_id == trader_id).update({"is_active": False})
+    
+    db.commit()
+    
+    return {"message": f"Trader {trader_id} rejected", "reason": reason}
 
 @router.post("/traders/{trader_id}/revoke")
 def revoke_trader_approval(
@@ -74,19 +104,41 @@ def revoke_trader_approval(
     
     return {"message": f"Trader {trader_id} approval revoked and services deactivated"}
 
-@router.get("/traders/pending", response_model=List[TraderResponse])
+@router.get("/traders/pending")
 def get_pending_traders(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Get all traders pending approval (admin only)."""
+    """Get all traders pending approval with user details (admin only)."""
     traders = db.query(Trader).filter(
-        Trader.approved == False
+        Trader.approved.is_not(True)
     ).offset(skip).limit(limit).all()
     
-    return traders
+    # Add user email to each trader
+    result = []
+    for trader in traders:
+        user = db.query(User).filter(User.id == trader.user_id).first()
+        trader_dict = {
+            "id": trader.id,
+            "user_id": trader.user_id,
+            "user_email": user.email if user else None,
+            "name": trader.name,
+            "sebi_reg": trader.sebi_reg,
+            "pan_card": trader.pan_card,
+            "certificate_path": trader.certificate_path,
+            "image_url": trader.image_url,
+            "bio": trader.bio,
+            "trades_per_day": trader.trades_per_day,
+            "approved": trader.approved,
+            "approved_at": trader.approved_at,
+            "rejection_reason": trader.rejection_reason,
+            "created_at": trader.created_at
+        }
+        result.append(trader_dict)
+    
+    return result
 
 @router.get("/traders", response_model=List[TraderResponse])
 def get_all_traders_admin(
@@ -173,6 +225,33 @@ def trigger_expiry_check(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error during expiry check: {str(e)}"
         )
+
+@router.get("/users")
+def get_all_users(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all users (admin only)."""
+    users = db.query(User).offset(skip).limit(limit).all()
+    
+    result = []
+    for user in users:
+        # Check if user has trader profile
+        trader = db.query(Trader).filter(Trader.user_id == user.id).first()
+        
+        user_dict = {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+            "created_at": user.created_at,
+            "is_trader": trader is not None,
+            "is_approved": trader.approved if trader else None
+        }
+        result.append(user_dict)
+    
+    return result
 
 @router.get("/stats")
 def get_system_stats(

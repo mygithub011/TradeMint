@@ -22,7 +22,25 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <span className="text-2xl font-bold text-indigo-600">Smart Trade</span>
+              <svg className="w-8 h-8 mr-2" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Chart bars */}
+                <rect x="10" y="70" width="12" height="20" fill="#00B894" rx="2"/>
+                <rect x="26" y="60" width="12" height="30" fill="#00B894" rx="2"/>
+                <rect x="42" y="50" width="12" height="40" fill="#00B894" rx="2"/>
+                <rect x="58" y="35" width="12" height="55" fill="#00B894" rx="2"/>
+                <rect x="74" y="25" width="12" height="65" fill="#00B894" rx="2"/>
+                
+                {/* Growth line */}
+                <path d="M16 76 L32 66 L48 56 L64 40 L80 30" stroke="#00B894" strokeWidth="3" fill="none"/>
+                
+                {/* Arrow */}
+                <path d="M75 35 L85 25 L95 35 M85 25 L85 45" stroke="#00B894" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M75 35 L85 25 L95 35" fill="#00B894"/>
+              </svg>
+              <div className="flex items-center">
+                <span className="text-2xl font-bold text-gray-800">Trade</span>
+                <span className="text-2xl font-bold text-green-600">Mint</span>
+              </div>
             </Link>
             
             {user && (

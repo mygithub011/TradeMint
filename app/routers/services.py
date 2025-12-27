@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from app.models.models import Service, Trader
-from app.utils.schemas import ServiceResponse
-from app.utils.dependencies import get_db
+from app.models.models import Service, Trader, User
+from app.utils.schemas import ServiceResponse, ServiceUpdate
+from app.utils.dependencies import get_db, get_current_user
 
 router = APIRouter(prefix="/services", tags=["Services"])
 
@@ -76,3 +76,76 @@ def get_services_by_trader(
     
     return services
 
+@router.put("/{service_id}", response_model=ServiceResponse)
+def update_service(
+    service_id: int,
+    service_update: ServiceUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a service (trader only)."""
+    # Get the service
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found"
+        )
+    
+    # Get trader profile
+    trader = db.query(Trader).filter(Trader.user_id == current_user.id).first()
+    if not trader:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only traders can update services"
+        )
+    
+    # Check if the service belongs to the trader
+    if service.trader_id != trader.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own services"
+        )
+    
+    # Update only the provided fields
+    update_data = service_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(service, field, value)
+    
+    db.commit()
+    db.refresh(service)
+    return service
+
+@router.delete("/{service_id}")
+def delete_service(
+    service_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a service (trader only)."""
+    # Get the service
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found"
+        )
+    
+    # Get trader profile
+    trader = db.query(Trader).filter(Trader.user_id == current_user.id).first()
+    if not trader:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only traders can delete services"
+        )
+    
+    # Check if the service belongs to the trader
+    if service.trader_id != trader.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own services"
+        )
+    
+    db.delete(service)
+    db.commit()
+    return {"message": "Service deleted successfully"}

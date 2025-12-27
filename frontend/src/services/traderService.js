@@ -1,6 +1,17 @@
 import api from './api';
 
 export const traderService = {
+  // Profile Management
+  getMyProfile: async () => {
+    const response = await api.get('/traders/me');
+    return response.data;
+  },
+
+  updateProfile: async (profileData) => {
+    const response = await api.put('/traders/profile', profileData);
+    return response.data;
+  },
+
   // Service Management
   createService: async (serviceData) => {
     const response = await api.post('/traders/services', serviceData);
@@ -22,27 +33,16 @@ export const traderService = {
     return response.data;
   },
 
-  // Subscribers Management - Get subscribers for each service
-  getServiceSubscribers: async (serviceId) => {
-    const response = await api.get(`/subscriptions/service/${serviceId}/subscribers`);
+  // Subscribers Management
+  getMySubscribers: async () => {
+    const response = await api.get('/traders/subscribers');
     return response.data;
   },
 
-  getMySubscribers: async () => {
-    // Get all services for the trader, then get subscribers for each
-    const services = await traderService.getMyServices();
-    const allSubscribers = [];
-    
-    for (const service of services) {
-      try {
-        const subscribers = await traderService.getServiceSubscribers(service.id);
-        allSubscribers.push(...subscribers);
-      } catch (error) {
-        console.error(`Failed to get subscribers for service ${service.id}:`, error);
-      }
-    }
-    
-    return allSubscribers;
+  // Get subscribers for a specific service
+  getServiceSubscribers: async (serviceId) => {
+    const response = await api.get(`/subscriptions/service/${serviceId}/subscribers`);
+    return response.data;
   },
 
   // Trade Alerts
@@ -64,6 +64,12 @@ export const traderService = {
 
   createTrade: async (tradeData) => {
     const response = await api.post('/alerts/', tradeData);
+    return response.data;
+  },
+
+  // Analytics
+  getAnalytics: async () => {
+    const response = await api.get('/traders/analytics');
     return response.data;
   }
 };

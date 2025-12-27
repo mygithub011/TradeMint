@@ -16,16 +16,20 @@ export default function AdminPanel() {
 
   const fetchData = async () => {
     try {
+      console.log('🔄 Fetching admin data...');
       const [tradersData, statsData, usersData] = await Promise.all([
         adminService.getPendingTraders(),
         adminService.getStats(),
         adminService.getAllUsers(),
       ]);
+      console.log('✅ Pending traders received:', tradersData);
+      console.log('Traders count:', tradersData?.length || 0);
       setPendingTraders(tradersData);
       setStats(statsData);
       setAllUsers(usersData);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('❌ Error fetching admin data:', error);
+      console.error('Error details:', error.response?.data);
     } finally {
       setLoading(false);
     }
@@ -44,9 +48,10 @@ export default function AdminPanel() {
   };
 
   const handleReject = async (traderId) => {
-    if (confirm('Reject this trader?')) {
+    const reason = prompt('Enter rejection reason:');
+    if (reason) {
       try {
-        await adminService.rejectTrader(traderId);
+        await adminService.rejectTrader(traderId, reason);
         fetchData();
         alert('Trader rejected successfully!');
       } catch (error) {
@@ -166,38 +171,77 @@ export default function AdminPanel() {
           {activeTab === 'pending' && (
             <div className="p-6">
               {pendingTraders.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No pending trader approvals</p>
+                <div className="text-center py-12">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="mt-4 text-gray-500">No pending trader approvals</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {pendingTraders.map((trader) => (
-                    <div key={trader.id} className="border border-gray-200 rounded-lg p-4 flex justify-between items-center">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{trader.email}</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Registered: {new Date(trader.created_at).toLocaleDateString()}
-                        </p>
-                        <span className="inline-block mt-2 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                          Pending Approval
-                        </span>
-                      </div>
-                      <div className="flex space-x-3">
-                        <button
-                          onClick={() => handleApprove(trader.id)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleReject(trader.id)}
-                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trader Info</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SEBI Reg</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PAN Card</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bio</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trades/Day</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {pendingTraders.map((trader) => (
+                        <tr key={trader.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center">
+                              <img 
+                                src={trader.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(trader.name || 'Trader')}&background=4F46E5&color=fff`}
+                                alt={trader.name}
+                                className="h-10 w-10 rounded-full"
+                              />
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{trader.name}</div>
+                                <div className="text-sm text-gray-500">{trader.user_email || 'N/A'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-mono text-gray-900">{trader.sebi_reg}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-mono text-gray-900">{trader.pan_card}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900 max-w-xs truncate">{trader.bio || 'No bio provided'}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{trader.trades_per_day}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(trader.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleApprove(trader.id)}
+                                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleReject(trader.id)}
+                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

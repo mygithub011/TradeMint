@@ -8,7 +8,7 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Welcome to <span className="text-indigo-600">Smart Trade</span>
+            Welcome to <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">TradeMint</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
             Connect with professional traders, subscribe to premium trading services, 
@@ -84,7 +84,7 @@ export default function Home() {
               <p className="text-gray-600">Happy Clients</p>
             </div>
             <div>
-              <p className="text-4xl font-bold text-indigo-600 mb-2">$2M+</p>
+              <p className="text-4xl font-bold text-indigo-600 mb-2">₹2M+</p>
               <p className="text-gray-600">Trading Volume</p>
             </div>
           </div>

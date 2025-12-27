@@ -46,6 +46,7 @@ def seed_database():
         trader = Trader(
             user_id=trader_user.id,
             sebi_reg="INH000001234",
+            pan_card="ABCDE1234F",  # Add PAN card
             approved=True
         )
         db.add(trader)

@@ -16,14 +16,13 @@ export default function ClientDashboard() {
 
   const fetchData = async () => {
     try {
-      const [subsData, tradesData, alertsData] = await Promise.all([
+      const [subsData, tradesData] = await Promise.all([
         clientService.getMySubscriptions(),
         clientService.getMyTrades(),
-        clientService.getMyAlerts(),
       ]);
       setSubscriptions(subsData);
       setTrades(tradesData);
-      setAlerts(alertsData);
+      setAlerts([]); // Clients don't have their own alerts - they receive alerts from subscribed services
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -39,11 +38,11 @@ export default function ClientDashboard() {
     });
   };
 
-  const getExpiryStatus = (expiryDate) => {
-    const daysLeft = Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
-    if (daysLeft < 0) return { text: 'Expired', color: 'text-red-600 bg-red-50' };
-    if (daysLeft < 7) return { text: `${daysLeft} days left`, color: 'text-orange-600 bg-orange-50' };
-    return { text: `${daysLeft} days left`, color: 'text-green-600 bg-green-50' };
+  const getExpiryStatus = (sub) => {
+    const daysLeft = sub.days_left || 0;
+    if (sub.is_expired || daysLeft <= 0) return { text: 'Expired', color: 'text-red-600 bg-red-50', borderColor: 'border-red-200' };
+    if (daysLeft < 7) return { text: `${daysLeft} days left`, color: 'text-orange-600 bg-orange-50', borderColor: 'border-orange-200' };
+    return { text: `${daysLeft} days left`, color: 'text-green-600 bg-green-50', borderColor: 'border-green-200' };
   };
 
   if (loading) {
@@ -139,40 +138,75 @@ export default function ClientDashboard() {
             ) : (
               <div className="space-y-4">
                 {subscriptions.map((sub) => {
-                  const status = getExpiryStatus(sub.expiry_date);
+                  const status = getExpiryStatus(sub);
                   return (
-                    <div key={sub.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                    <div key={sub.id} className={`border ${status.borderColor} rounded-xl p-6 hover:shadow-lg transition-all`}>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900">{sub.service_name || 'Service'}</h3>
-                          <p className="text-sm text-gray-600 mt-1">Trader: {sub.trader_email || 'N/A'}</p>
-                          <div className="flex items-center mt-2 space-x-4">
-                            <span className="text-sm text-gray-500">
-                              Started: {formatDate(sub.start_date)}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              Expires: {formatDate(sub.expiry_date)}
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-bold text-gray-900">{sub.service_name || 'Service'}</h3>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>
+                              {status.text}
                             </span>
                           </div>
-                        </div>
-                        <div className="ml-4">
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${status.color}`}>
-                            {status.text}
-                          </span>
-                          {sub.telegram_joined ? (
-                            <div className="mt-2 flex items-center text-green-600 text-sm">
-                              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          
+                          {/* Trader Details */}
+                          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
-                              Telegram Joined
+                              <h4 className="font-bold text-gray-900">{sub.trader_name}</h4>
                             </div>
-                          ) : (
-                            <div className="mt-2 flex items-center text-orange-600 text-sm">
-                              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            <div className="text-sm">
+                              <span className="text-gray-600">SEBI Reg:</span>
+                              <span className="ml-2 font-mono font-semibold text-purple-700">{sub.trader_sebi_reg || 'N/A'}</span>
+                            </div>
+                          </div>
+
+                          {/* Subscription Details */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              Join Telegram
+                              <div>
+                                <p className="text-xs text-gray-500">Started</p>
+                                <p className="text-sm font-semibold text-gray-900">{formatDate(sub.start_date)}</p>
+                              </div>
                             </div>
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div>
+                                <p className="text-xs text-gray-500">Expires</p>
+                                <p className="text-sm font-semibold text-gray-900">{formatDate(sub.end_date)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div>
+                                <p className="text-xs text-gray-500">Amount Paid</p>
+                                <p className="text-sm font-bold text-green-600">₹{sub.service_price}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              <div>
+                                <p className="text-xs text-gray-500">Duration</p>
+                                <p className="text-sm font-semibold text-gray-900">{sub.duration_days} days</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Service Description */}
+                          {sub.service_description && (
+                            <p className="text-sm text-gray-600 mt-2">{sub.service_description}</p>
                           )}
                         </div>
                       </div>
@@ -222,14 +256,14 @@ export default function ClientDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${trade.entry_price?.toFixed(2)}
+                        ₹{trade.entry_price?.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${trade.exit_price?.toFixed(2) || '-'}
+                        ₹{trade.exit_price?.toFixed(2) || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className={trade.pnl >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                          {trade.pnl ? `$${trade.pnl.toFixed(2)}` : '-'}
+                          {trade.pnl ? `₹${trade.pnl.toFixed(2)}` : '-'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">

@@ -20,12 +20,11 @@
   },
 
   "env": {
-    "DATABASE_URL": "@database_url",
-    "SECRET_KEY": "@secret_key",
-    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token",
-    "RAZORPAY_KEY_ID": "@razorpay_key_id",
-    "RAZORPAY_KEY_SECRET": "@razorpay_key_secret",
-    "CRON_SECRET": "@cron_secret",
+    "DATABASE_URL": "postgresql://neondb_owner:npg_sRUfgNBoe0p2@ep-misty-hat-ad8yiafy-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+    "SECRET_KEY": "14835cac1f72cd635fd9aa6518d567b8ee5bde259ea87d4a52caa8da39a787ac",
+    "TELEGRAM_BOT_TOKEN": "8358386533:AAG-zmUuYFUMF0Mq5LX6Vq7TzB-PLW9lpZM",
+    "RAZORPAY_KEY_ID": "rzp_test_Rvxyoq17CRmfu8",
+    "RAZORPAY_KEY_SECRET": "d5tg9JM5OD7O7KtOtVoJan0D",
     "VERCEL": "1"
   }
 }

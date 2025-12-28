@@ -10,6 +10,8 @@ import Register from './pages/Register';
 import Marketplace from './pages/Marketplace';
 import TraderServices from './pages/TraderServices';
 import ClientDashboard from './pages/ClientDashboard';
+import ClientAlerts from './pages/ClientAlerts';
+import ClientProfile from './pages/ClientProfile';
 import TraderDashboard from './pages/TraderDashboard';
 import AdminPanel from './pages/AdminPanel';
 
@@ -31,6 +33,24 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['client']}>
                   <ClientDashboard />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/client/alerts"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ClientAlerts />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/client/profile"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ClientProfile />
                 </ProtectedRoute>
               }
             />

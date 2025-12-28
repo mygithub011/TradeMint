@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import TermsModal from '../components/TermsModal';
 
 export default function Register() {
   const [step, setStep] = useState(1); // 1: Role Selection, 2: Details Form
@@ -13,6 +14,8 @@ export default function Register() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [pendingLoginToken, setPendingLoginToken] = useState(null);
   
   // Trader-specific fields
   const [traderName, setTraderName] = useState('');
@@ -109,25 +112,49 @@ export default function Register() {
       // Register user
       await register(email, password, role);
       
+      // Login immediately to get token for terms acceptance
+      const loginResponse = await api.post('/auth/login', 
+        new URLSearchParams({
+          username: email,
+          password: password
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+      
+      const token = loginResponse.data.access_token;
+      console.log('Token received, showing terms modal...');
+      
+      // Store token and show terms modal
+      setPendingLoginToken(token);
+      setShowTermsModal(true);
+      setLoading(false);
+      
+    } catch (err) {
+      setLoading(false);
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+    }
+  };
+
+  const handleTermsAccept = async () => {
+    setShowTermsModal(false);
+    setLoading(true);
+    
+    try {
+      // Accept terms on backend
+      await api.post('/auth/accept-terms', {}, {
+        headers: {
+          Authorization: `Bearer ${pendingLoginToken}`
+        }
+      });
+      
       // If trader, onboard with additional details
       if (role === 'trader') {
         try {
-          // Login to get token
-          console.log('Logging in to get token...');
-          const loginResponse = await api.post('/auth/login', 
-            new URLSearchParams({
-              username: email,
-              password: password
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-              }
-            }
-          );
-          
-          const token = loginResponse.data.access_token;
-          console.log('Token received, preparing onboarding data...');
+          console.log('Processing trader onboarding...');
           
           // Prepare onboarding data - only include optional fields if they have values
           const onboardData = {
@@ -146,28 +173,21 @@ export default function Register() {
           }
           
           console.log('Onboarding data:', onboardData);
-          console.log('Onboarding data as JSON:', JSON.stringify(onboardData, null, 2));
-          console.log('Sending POST to /traders/onboard with token:', token?.substring(0, 20) + '...');
           
           // Onboard trader with SEBI and PAN details
           const onboardResponse = await api.post('/traders/onboard', onboardData, {
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${pendingLoginToken}`,
               'Content-Type': 'application/json'
             }
           });
           
           console.log('✅ Onboarding successful!', onboardResponse.data);
-          console.log('Status code:', onboardResponse.status);
           setLoading(false);
           setSuccess('Registration successful! Your account is pending admin approval.');
           setShowSuccess(true);
         } catch (onboardErr) {
           console.error('❌ Onboarding error:', onboardErr);
-          console.error('Error response data:', onboardErr.response?.data);
-          console.error('Error response status:', onboardErr.response?.status);
-          console.error('Error message:', onboardErr.message);
-          console.error('Full error object:', JSON.stringify(onboardErr.response?.data, null, 2));
           setLoading(false);
           
           const errorDetail = onboardErr.response?.data?.detail || onboardErr.message || 'Unknown error';
@@ -187,8 +207,19 @@ export default function Register() {
       }, 3000);
     } catch (err) {
       setLoading(false);
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      setError('Failed to accept terms. Please try again.');
     }
+  };
+
+  const handleTermsDecline = () => {
+    setShowTermsModal(false);
+    setError('You must accept the Terms & Conditions to use TradeMint.');
+    setPendingLoginToken(null);
+    // Reset form
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setStep(1);
   };
 
   return (
@@ -483,6 +514,14 @@ export default function Register() {
           </div>
         </div>
       )}
+
+      {/* Terms & Conditions Modal */}
+      <TermsModal 
+        isOpen={showTermsModal}
+        onAccept={handleTermsAccept}
+        onDecline={handleTermsDecline}
+        userEmail={email}
+      />
 
       {/* Success Notification */}
       {showSuccess && (

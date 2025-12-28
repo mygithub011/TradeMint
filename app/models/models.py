@@ -10,7 +10,17 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
     role = Column(String, nullable=False)  # admin, trader, client
+    terms_accepted = Column(Boolean, default=False)  # Terms & Conditions acceptance
+    terms_accepted_at = Column(DateTime, nullable=True)  # When terms were accepted
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Profile fields
+    name = Column(String, nullable=True)  # Full name
+    phone = Column(String, nullable=True)  # Phone number (not editable once set)
+    dob = Column(String, nullable=True)  # Date of birth (YYYY-MM-DD)
+    gender = Column(String, nullable=True)  # M, F, Other
+    pan = Column(String, nullable=True)  # PAN card (not editable once set)
+    profile_photo = Column(String, nullable=True)  # Profile photo URL/path
     
     # Relationships
     trader = relationship("Trader", back_populates="user", uselist=False)
@@ -89,6 +99,27 @@ class TradeAlert(Base):
     stop_loss = Column(String, nullable=True)  # Stop loss price
     cmp = Column(String, nullable=True)  # Current market price
     validity = Column(String, nullable=True)  # Validity date
+    
+    # Relationships
+    service = relationship("Service", backref="alerts")
+    trader = relationship("Trader", backref="trade_alerts")
+    recipients = relationship("AlertRecipient", back_populates="alert")
+
+class AlertRecipient(Base):
+    """Track which subscribers received which alerts"""
+    __tablename__ = "alert_recipients"
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("trade_alerts.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Subscriber who received the alert
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
+    received_at = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    alert = relationship("TradeAlert", back_populates="recipients")
+    user = relationship("User", backref="received_alerts")
+    subscription = relationship("Subscription", backref="alert_receipts")
 
 class Payment(Base):
     """Payment model to track all transactions with ACID compliance"""

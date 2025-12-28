@@ -18,7 +18,15 @@ export default function Login() {
     try {
       const userData = await login(email, password);
       
-      // Redirect based on role
+      // Check if there's a redirect path stored
+      const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+      if (redirectPath) {
+        sessionStorage.removeItem('redirectAfterLogin');
+        navigate(redirectPath);
+        return;
+      }
+      
+      // Default redirect based on role
       if (userData.role === 'admin') {
         navigate('/admin');
       } else if (userData.role === 'trader') {

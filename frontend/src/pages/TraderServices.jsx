@@ -17,10 +17,23 @@ export default function TraderServices() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showExistingSubscription, setShowExistingSubscription] = useState(false);
   const [existingSubscriptionInfo, setExistingSubscriptionInfo] = useState(null);
+  const [showPanModal, setShowPanModal] = useState(false);
+  const [panNumber, setPanNumber] = useState('');
+  const [panError, setPanError] = useState('');
+  const [pendingSubscription, setPendingSubscription] = useState(null);
+  const [panVerifying, setPanVerifying] = useState(false);
+  const [panVerified, setPanVerified] = useState(false);
 
   useEffect(() => {
+    // Check if user is logged in before fetching services
+    if (!user) {
+      // Store the intended destination
+      sessionStorage.setItem('redirectAfterLogin', `/trader/${traderId}/services`);
+      navigate('/login');
+      return;
+    }
     fetchTraderServices();
-  }, [traderId]);
+  }, [traderId, user, navigate]);
 
   const fetchTraderServices = async () => {
     try {
@@ -49,6 +62,28 @@ export default function TraderServices() {
       return;
     }
 
+    // Check if user has PAN in profile
+    try {
+      const profileResponse = await api.get('/auth/profile');
+      const userProfile = profileResponse.data;
+      
+      if (!userProfile.pan) {
+        // Store subscription details and show PAN modal
+        setPendingSubscription({ serviceId, serviceName, price, duration, traderName });
+        setShowPanModal(true);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking profile:', error);
+      alert('Failed to verify profile. Please try again.');
+      return;
+    }
+
+    // Proceed with subscription
+    await proceedWithSubscription(serviceId, serviceName, price, duration, traderName);
+  };
+
+  const proceedWithSubscription = async (serviceId, serviceName, price, duration, traderName) => {
     setSubscribing(serviceId + '-' + duration); // Track specific tier being subscribed to
     
     try {
@@ -115,6 +150,63 @@ export default function TraderServices() {
       setSubscribing(null);
       alert('Failed to create order. Please try again.');
     }
+  };
+
+  const handlePanSubmit = async () => {
+    // Validate PAN format (10 alphanumeric characters)
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    const upperPan = panNumber.toUpperCase();
+    
+    if (!upperPan || upperPan.length !== 10) {
+      setPanError('PAN must be 10 characters long');
+      return;
+    }
+    
+    if (!panRegex.test(upperPan)) {
+      setPanError('Invalid PAN format (e.g., ABCDE1234F)');
+      return;
+    }
+
+    try {
+      // Show verifying state
+      setPanVerifying(true);
+      setPanError('');
+      
+      // Update profile with PAN
+      await api.put('/auth/profile', { pan: upperPan });
+      
+      // Show success state
+      setPanVerifying(false);
+      setPanVerified(true);
+      
+      // Wait 1.5 seconds to show success, then proceed
+      setTimeout(async () => {
+        // Close modal and reset states
+        setShowPanModal(false);
+        setPanNumber('');
+        setPanError('');
+        setPanVerified(false);
+        
+        if (pendingSubscription) {
+          const { serviceId, serviceName, price, duration, traderName } = pendingSubscription;
+          await proceedWithSubscription(serviceId, serviceName, price, duration, traderName);
+          setPendingSubscription(null);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Error saving PAN:', error);
+      setPanVerifying(false);
+      setPanError(error.response?.data?.detail || 'Failed to save PAN. Please try again.');
+    }
+  };
+
+  const closePanModal = () => {
+    setShowPanModal(false);
+    setPanNumber('');
+    setPanError('');
+    setPendingSubscription(null);
+    setPanVerifying(false);
+    setPanVerified(false);
   };
 
   if (loading) {
@@ -472,6 +564,110 @@ export default function TraderServices() {
               <p className="text-gray-600 mt-3 font-medium">{successMessage}</p>
               <p className="text-sm text-gray-500 mt-2">✨ Redirecting to your dashboard...</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAN Verification Modal */}
+      {showPanModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 transform transition-all">
+            {!panVerifying && !panVerified && (
+              <>
+                <div className="text-center mb-6">
+                  <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
+                    <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">PAN Required</h3>
+                  <p className="text-gray-600">Please provide your PAN card number to continue with the subscription</p>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    PAN Card Number
+                  </label>
+                  <input
+                    type="text"
+                    value={panNumber}
+                    onChange={(e) => {
+                      setPanNumber(e.target.value.toUpperCase());
+                      setPanError('');
+                    }}
+                    maxLength="10"
+                    placeholder="ABCDE1234F"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase text-center text-lg font-semibold tracking-wider"
+                  />
+                  {panError && (
+                    <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      {panError}
+                    </p>
+                  )}
+                  
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-800">
+                      <strong>Note:</strong> Your PAN will be stored securely and cannot be changed later. Make sure to enter the correct PAN number.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={closePanModal}
+                    className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePanSubmit}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Verification in Progress */}
+            {panVerifying && (
+              <div className="text-center py-8">
+                <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-blue-100 mb-6 animate-pulse">
+                  <svg className="h-10 w-10 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Verification in Progress</h3>
+                <p className="text-gray-600">Verifying your PAN details...</p>
+                <div className="mt-6 flex justify-center gap-2">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+              </div>
+            )}
+
+            {/* Verification Success */}
+            {panVerified && (
+              <div className="text-center py-8">
+                <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-green-100 mb-6 animate-scale-in">
+                  <svg className="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-green-600 mb-2">PAN Verified Successfully!</h3>
+                <p className="text-gray-600">Proceeding to payment...</p>
+                <div className="mt-6">
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full animate-progress"></div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

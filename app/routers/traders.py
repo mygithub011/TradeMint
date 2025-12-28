@@ -231,12 +231,16 @@ def update_trader_profile(
     return trader
 
 @router.post("/services", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
-def create_service(
+async def create_service(
     service_data: ServiceCreate,
     current_user: User = Depends(get_current_trader),
     db: Session = Depends(get_db)
 ):
-    """Create a new trading service (only for approved traders)."""
+    """Create a new trading service (only for approved traders).
+    
+    Note: Telegram groups must be created manually and linked to the service.
+    See TELEGRAM_GROUP_SETUP_GUIDE.md for instructions.
+    """
     # Get trader record
     trader = db.query(Trader).filter(Trader.user_id == current_user.id).first()
     
@@ -260,13 +264,24 @@ def create_service(
         price=service_data.price,
         duration_days=service_data.duration_days,
         pricing_tiers=service_data.pricing_tiers,
-        telegram_group_id=service_data.telegram_group_id,
         is_active=True
     )
     
     db.add(new_service)
     db.commit()
     db.refresh(new_service)
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    trader_name = trader.name or f"Trader {trader.id}"
+    
+    # Log instructions for manual Telegram group setup
+    logger.info(
+        f"Service '{new_service.name}' created (ID: {new_service.id}). "
+        f"NEXT STEPS: Create Telegram group manually named '{trader_name} - {new_service.name}', "
+        f"add bot as admin, get group ID using get_group_id.py, then update service.telegram_group_id. "
+        f"See TELEGRAM_GROUP_SETUP_GUIDE.md for details."
+    )
     
     return new_service
 

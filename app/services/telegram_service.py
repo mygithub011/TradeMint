@@ -129,7 +129,80 @@ class TelegramService:
             return is_admin
         except TelegramError as e:
             logger.error(f"Failed to check bot admin status in group {group_id}: {e}")
-            return False
-
+            return False    
+    async def create_service_group(self, service_name: str, trader_name: str, service_id: int) -> tuple[Optional[str], Optional[str]]:
+        """Create a new Telegram group for a service.
+        
+        Returns:
+            tuple: (group_id, invite_link) or (None, None) if failed
+        """
+        if not self.bot:
+            logger.warning("Telegram bot not configured, cannot create group")
+            return None, None
+        
+        try:
+            # Create group name with service and trader info
+            group_title = f"{trader_name} - {service_name}"
+            group_description = f"Exclusive trading alerts for {service_name} by {trader_name}. Service ID: {service_id}"
+            
+            # Create the group - Note: Bot must have permissions
+            # The bot will be the creator/admin automatically
+            chat = await self.bot.create_chat(title=group_title)
+            group_id = str(chat.id)
+            
+            # Set group description
+            try:
+                await self.bot.set_chat_description(chat_id=group_id, description=group_description)
+            except TelegramError as e:
+                logger.warning(f"Could not set group description: {e}")
+            
+            # Generate permanent invite link
+            invite_link = await self.bot.create_chat_invite_link(
+                chat_id=group_id,
+                creates_join_request=False  # Members can join directly
+            )
+            
+            logger.info(f"Created Telegram group '{group_title}' with ID: {group_id}")
+            return group_id, invite_link.invite_link
+            
+        except TelegramError as e:
+            logger.error(f"Failed to create Telegram group for service {service_id}: {e}")
+            return None, None
+        except Exception as e:
+            logger.error(f"Unexpected error creating Telegram group: {e}")
+            return None, None
+    
+    async def get_or_create_service_group(self, service_name: str, trader_name: str, service_id: int, existing_group_id: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+        """Get existing group or create new one if doesn't exist.
+        
+        Args:
+            service_name: Name of the service
+            trader_name: Name of the trader
+            service_id: ID of the service
+            existing_group_id: Existing group ID to verify, if any
+        
+        Returns:
+            tuple: (group_id, invite_link) or (None, None) if failed
+        """
+        if not self.bot:
+            logger.warning("Telegram bot not configured")
+            return None, None
+        
+        # If group ID exists, verify it's still valid
+        if existing_group_id:
+            try:
+                chat = await self.bot.get_chat(chat_id=existing_group_id)
+                # Generate new invite link
+                invite_link = await self.bot.create_chat_invite_link(
+                    chat_id=existing_group_id,
+                    creates_join_request=False
+                )
+                logger.info(f"Using existing group {existing_group_id} for service {service_id}")
+                return existing_group_id, invite_link.invite_link
+            except TelegramError as e:
+                logger.warning(f"Existing group {existing_group_id} not accessible, creating new one: {e}")
+        
+        # Create new group
+        return await self.create_service_group(service_name, trader_name, service_id)
 # Singleton instance
 telegram_service = TelegramService()

@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from app.models.models import TradeAlert, Service, Trader, User
-from app.utils.dependencies import get_current_trader, get_db
-from app.utils.schemas import TradeAlertCreate, TradeAlertResponse
+from app.models.models import TradeAlert, Service, Trader, User, Subscription, AlertRecipient
+from app.utils.dependencies import get_current_trader, get_current_user, get_db
+from app.utils.schemas import TradeAlertCreate, TradeAlertResponse, ClientAlertResponse
 from app.services.telegram_group_manager import telegram_group_manager
+from datetime import datetime
 import asyncio
 import logging
 
@@ -63,6 +64,26 @@ async def send_trade_alert(
     db.add(new_alert)
     db.commit()
     db.refresh(new_alert)
+    
+    # Get all active subscribers for this service
+    active_subscribers = db.query(Subscription).filter(
+        Subscription.service_id == service.id,
+        Subscription.status == "ACTIVE",
+        Subscription.end_date >= datetime.utcnow()
+    ).all()
+    
+    # Create AlertRecipient records for each active subscriber
+    for subscription in active_subscribers:
+        alert_recipient = AlertRecipient(
+            alert_id=new_alert.id,
+            user_id=subscription.user_id,
+            subscription_id=subscription.id
+        )
+        db.add(alert_recipient)
+    
+    db.commit()
+    
+    logger.info(f"Alert {new_alert.id} created and sent to {len(active_subscribers)} active subscribers")
     
     # Send to Telegram group if configured
     if service.telegram_group_id:
@@ -158,3 +179,97 @@ def get_my_alerts(
     ).order_by(TradeAlert.sent_at.desc()).offset(skip).limit(limit).all()
     
     return alerts
+
+@router.get("/client/my-alerts", response_model=List[ClientAlertResponse])
+def get_client_alerts(
+    skip: int = 0,
+    limit: int = 100,
+    unread_only: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all alerts received by the current client with full context."""
+    query = db.query(
+        AlertRecipient,
+        TradeAlert,
+        Service,
+        Trader
+    ).join(
+        TradeAlert, AlertRecipient.alert_id == TradeAlert.id
+    ).join(
+        Service, TradeAlert.service_id == Service.id
+    ).join(
+        Trader, TradeAlert.trader_id == Trader.id
+    ).filter(
+        AlertRecipient.user_id == current_user.id
+    )
+    
+    if unread_only:
+        query = query.filter(AlertRecipient.is_read == False)
+    
+    results = query.order_by(
+        AlertRecipient.received_at.desc()
+    ).offset(skip).limit(limit).all()
+    
+    # Format response with all context
+    alerts = []
+    for recipient, alert, service, trader in results:
+        alerts.append(ClientAlertResponse(
+            id=recipient.id,
+            alert_id=alert.id,
+            service_id=service.id,
+            service_name=service.name,
+            trader_name=trader.name or trader.user.email,
+            sent_at=alert.sent_at,
+            received_at=recipient.received_at,
+            is_read=recipient.is_read,
+            read_at=recipient.read_at,
+            stock_symbol=alert.stock_symbol,
+            action=alert.action,
+            lot_size=alert.lot_size,
+            rate=alert.rate,
+            target=alert.target,
+            stop_loss=alert.stop_loss,
+            cmp=alert.cmp,
+            validity=alert.validity
+        ))
+    
+    return alerts
+
+@router.post("/client/mark-read/{recipient_id}")
+def mark_alert_read(
+    recipient_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark an alert as read by the client."""
+    recipient = db.query(AlertRecipient).filter(
+        AlertRecipient.id == recipient_id,
+        AlertRecipient.user_id == current_user.id
+    ).first()
+    
+    if not recipient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found"
+        )
+    
+    if not recipient.is_read:
+        recipient.is_read = True
+        recipient.read_at = datetime.utcnow()
+        db.commit()
+    
+    return {"message": "Alert marked as read"}
+
+@router.get("/client/unread-count")
+def get_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get count of unread alerts for the current client."""
+    count = db.query(AlertRecipient).filter(
+        AlertRecipient.user_id == current_user.id,
+        AlertRecipient.is_read == False
+    ).count()
+    
+    return {"unread_count": count}
